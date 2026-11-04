@@ -89,6 +89,8 @@ class PlanTests(unittest.TestCase):
                 unchanged = other if candidate["repo"] == REPO else REPO
                 self.assertEqual(models[unchanged]["revision"], SHA)
                 report = (plan / "report.md").read_text()
+                self.assertIn(f"{HUB}/{candidate['repo']}/tree/{SHA}", report)
+                self.assertIn(f"{HUB}/{candidate['repo']}/tree/{'b' * 40}", report)
                 self.assertIn("Declared license changed", report)
                 self.assertIn("Weights or model binaries", report)
                 self.assertIn("&lt;test&gt;.safetensors", report)

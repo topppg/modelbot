@@ -165,21 +165,25 @@ def report(repo, old, new):
     lines = [
         f"Updates `{repo}` from `{old_sha}` to `{new_sha}`.",
         "",
-        f"[Compare revisions on Hugging Face]({HUB}/{repo}/compare/{old_sha}...{new_sha})",
+        f"[Current files]({HUB}/{repo}/tree/{old_sha}) · "
+        f"[Candidate files]({HUB}/{repo}/tree/{new_sha})",
         "",
         "File changes are based on Hub metadata. Model weights were not downloaded for this comparison.",
     ]
     if old.get("license") != new.get("license"):
-        license_change = f"{json.dumps(old.get('license'))} → {json.dumps(new.get('license'))}"
+        license_change = f"{json.dumps(old.get('license'))[:300]} → {json.dumps(new.get('license'))[:300]}"
         lines += ["", "Declared license changed:", f"<pre>{html.escape(license_change)}</pre>"]
     if not changes:
         lines += ["", "The file manifest is unchanged."]
     for category, items in sorted(changes.items()):
         lines += ["", f"### {category} ({len(items)})", "", "<pre>"]
-        for status, path in items[:20]:
-            lines.append(f"{status}  {html.escape(json.dumps(path)[:400])}")
-        if len(items) > 20:
-            lines.append(f"… {len(items) - 20} more (see the lockfile diff)")
+        for status, path in items[:10]:
+            label = json.dumps(path)
+            if len(label) > 140:
+                label = label[:140] + "…"
+            lines.append(f"{status}  {html.escape(label)}")
+        if len(items) > 10:
+            lines.append(f"… {len(items) - 10} more (see the lockfile diff)")
         lines.append("</pre>")
     return "\n".join(lines) + "\n"
 
