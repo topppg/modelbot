@@ -1,0 +1,13 @@
+name: Modelbot demo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  updates:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/modelbot.yml
+    with:
+      validate: true

@@ -15,13 +15,46 @@ Run `python /path/to/modelbot/modelbot.py lock` from your project directory and 
 
 Run `python /path/to/modelbot/modelbot.py plan` to check for updates locally. It prints a JSON list of candidates and writes a proposed lockfile and Markdown report per model under `.modelbot-plan/`. Your committed lockfile stays at its current revision until you accept an update.
 
-## First milestone
+## Use the pin in your application
 
-A repository lists the public Hugging Face models it wants to track. Modelbot resolves each configured branch or tag to an exact commit and records it in a lockfile. When the upstream reference moves, Modelbot proposes one model update per pull request against the repository's default branch.
+Your application should read the revision from the lockfile when loading the model:
 
-The pull request shows the old and new revisions and summarizes changes to weights, configuration, chat templates, licensing, and executable files. A repository can supply its own validation command to test the candidate with its serving runtime and GPU. The report distinguishes passed, failed, and skipped checks.
+```python
+import json
+from pathlib import Path
 
-Candidate model code is untrusted. Keep validation separate from the job that writes pull requests, and use a dedicated, isolated runner without repository write credentials or production secrets for any test that executes candidate code.
+from transformers import AutoModelForCausalLM
+
+repo = "sshleifer/tiny-gpt2"
+revision = json.loads(Path("model.lock").read_text())["models"][repo]["revision"]
+model = AutoModelForCausalLM.from_pretrained(repo, revision=revision)
+```
+
+## Enable update pull requests
+
+In your public repository, enable **Allow GitHub Actions to create and approve pull requests** under **Settings → Actions → General**. Then add `.github/workflows/model-updates.yml`. Replace `MODEL_BOT_COMMIT_SHA` with the full commit SHA of the Modelbot version you want to run.
+
+```yaml
+name: Model updates
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 8 * * 1'
+jobs:
+  updates:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: topppg/modelbot/.github/workflows/modelbot.yml@MODEL_BOT_COMMIT_SHA
+    with:
+      validate: true
+```
+
+Run the workflow manually from the default branch to try it. Modelbot opens one pull request per changed model against that branch. It skips revisions already proposed, including closed pull requests. If a model already has an open update, close or merge it before the next update can be proposed.
+
+With `validate: true`, add a Bash script at `.github/modelbot-validate`. It runs with the proposed `model.lock` in place and receives `MODELBOT_MODEL` and `MODELBOT_REVISION`. Use it to run a model load or your own evaluations against the exact candidate. A failed job creates a draft pull request with a link to the run. Set `validate: false` or omit it to generate metadata-only reports.
+
+Validation defaults to a GitHub-hosted runner and can use a custom label via `validation-runner`. Use an isolated, disposable runner if you need a GPU. Give it no production secrets. GitHub can require maintainer approval for ordinary PR-triggered checks on pull requests opened by `GITHUB_TOKEN`; Modelbot's validation runs before the PR opens.
 
 ## Contributing
 

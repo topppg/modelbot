@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+pin=$(jq -er --arg model "$MODELBOT_MODEL" '.models[$model].revision' model.lock)
+test "$pin" = "$MODELBOT_REVISION"
+curl --fail --silent --show-error --location --max-time 30 \
+  "https://huggingface.co/$MODELBOT_MODEL/resolve/$pin/config.json" |
+  jq -e '.model_type | strings | length > 0'
