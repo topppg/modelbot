@@ -1,0 +1,44 @@
+{
+  "models": {
+    "sshleifer/tiny-gpt2": {
+      "files": {
+        ".gitattributes": {
+          "digest": "git-sha1:ae8c63daedbd4206d7d40126955d4e6ab1c80f8f",
+          "size": 391
+        },
+        "config.json": {
+          "digest": "git-sha1:2c81a6c4c984e95a45338c64a7445c1f0f88077f",
+          "size": 662
+        },
+        "merges.txt": {
+          "digest": "git-sha1:226b0752cac7789c48f0cb3ec53eda48b7be36cc",
+          "size": 456318
+        },
+        "pytorch_model.bin": {
+          "digest": "sha256:b706b24034032bdfe765ded5ab6403d201d295a995b790cb24c74becca5c04e6",
+          "size": 2514146
+        },
+        "special_tokens_map.json": {
+          "digest": "git-sha1:817762d631ad6f9c799f6b9dc713c46420e65546",
+          "size": 90
+        },
+        "tf_model.h5": {
+          "digest": "sha256:09166c56d46ec8eca5f1e46e4e4a62265fca5975a70a2b263c1795291a685cf7",
+          "size": 452120
+        },
+        "tokenizer_config.json": {
+          "digest": "git-sha1:be4d21d94f3b4687e5a54d84bf6ab46ed0f8defd",
+          "size": 26
+        },
+        "vocab.json": {
+          "digest": "git-sha1:b00361fece0387ca34b4b8b8539ed830d644dbeb",
+          "size": 898669
+        }
+      },
+      "license": null,
+      "ref": "main",
+      "revision": "f42686d7a97d000446a173ab001673a12e156924"
+    }
+  },
+  "version": 1
+}
