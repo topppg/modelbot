@@ -1,6 +1,17 @@
 # Modelbot
 
-Modelbot is an open-source project for reviewing Hugging Face model updates in GitHub pull requests. It is currently a scaffold.
+Modelbot is an open-source project for reviewing Hugging Face model updates in GitHub pull requests.
+
+## Pin a model
+
+With Python 3.11 or later, create a `modelbot.toml` in your project:
+
+```toml
+[models]
+"sshleifer/tiny-gpt2" = "main"
+```
+
+Run `python /path/to/modelbot/modelbot.py lock` from your project directory and commit the resulting `model.lock`. The lock records the exact revision, the model card's declared license, and the file identifiers reported by Hugging Face. This only fetches metadata. Run `lock` again after adding or changing tracked references. Existing pins with unchanged tracked references are preserved.
 
 ## First milestone
 
