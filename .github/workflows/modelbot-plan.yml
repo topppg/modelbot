@@ -1,0 +1,68 @@
+name: Modelbot preview
+
+on:
+  workflow_call:
+    outputs:
+      candidates:
+        value: ${{ jobs.plan.outputs.candidates }}
+      artifact:
+        value: ${{ jobs.plan.outputs.artifact }}
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: >-
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.event.repository.private == false &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      candidates: ${{ steps.plan.outputs.candidates }}
+      artifact: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: project
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ job.workflow_repository }}
+          ref: ${{ job.workflow_sha }}
+          path: tool
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Plan updates
+        id: plan
+        working-directory: project
+        run: |
+          candidates=$(python ../tool/modelbot.py --output "$RUNNER_TEMP/plans" plan)
+          if [ "$(jq 'length' <<< "$candidates")" -gt 32 ]; then
+            echo "Modelbot supports up to 32 updates per run." >&2
+            exit 1
+          fi
+          echo "candidates=$candidates" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Modelbot preview"
+            if [ "$candidates" = '[]' ]; then
+              echo "All tracked models are up to date."
+            else
+              jq -r '.[] | "- `\(.repo)` → `\(.revision)`"' <<< "$candidates"
+              echo
+              echo "Download the modelbot-plans artifact for the full reports and proposed lockfiles."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        id: upload
+        if: steps.plan.outputs.candidates != '[]'
+        with:
+          name: modelbot-plans-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/plans
+          if-no-files-found: error
+          retention-days: 3

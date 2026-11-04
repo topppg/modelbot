@@ -2,9 +2,21 @@ name: Modelbot demo
 
 on:
   workflow_dispatch:
+    inputs:
+      preview:
+        description: Generate reports without opening PRs
+        type: boolean
+        default: false
 
 jobs:
+  preview:
+    if: inputs.preview
+    permissions:
+      contents: read
+    uses: ./.github/workflows/modelbot-plan.yml
+
   updates:
+    if: '!inputs.preview'
     permissions:
       contents: write
       pull-requests: write

@@ -1,0 +1,17 @@
+name: Model updates
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 8 * * 1'
+
+jobs:
+  updates:
+    permissions:
+      contents: write
+      pull-requests: write
+    uses: topppg/modelbot/.github/workflows/modelbot.yml@v0.1.0
+    # To run your own validation script, uncomment these lines.
+    # with:
+    #   validate: true
+    #   validation-runner: modelbot-gpu
