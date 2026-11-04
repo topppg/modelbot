@@ -10,6 +10,10 @@
           "digest": "git-sha1:2c81a6c4c984e95a45338c64a7445c1f0f88077f",
           "size": 662
         },
+        "flax_model.msgpack": {
+          "digest": "sha256:3cd4987249615ca870f2c18e657a62f0962aecad0eac790dd89362227310fd30",
+          "size": 411642
+        },
         "merges.txt": {
           "digest": "git-sha1:226b0752cac7789c48f0cb3ec53eda48b7be36cc",
           "size": 456318
@@ -37,7 +41,7 @@
       },
       "license": null,
       "ref": "main",
-      "revision": "f42686d7a97d000446a173ab001673a12e156924"
+      "revision": "5f91d94bd9cd7190a9f3216ff93cd1dd95f2c7be"
     }
   },
   "version": 1
