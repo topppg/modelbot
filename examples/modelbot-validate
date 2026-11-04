@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+: "${MODELBOT_MODEL:?Set MODELBOT_MODEL to the Hugging Face repository ID}"
+: "${MODELBOT_REVISION:?Set MODELBOT_REVISION to the candidate commit}"
+[[ "$MODELBOT_REVISION" =~ ^[0-9a-f]{40}$ ]]
+
+port=${MODELBOT_VLLM_PORT:-18000}
+startup_seconds=${MODELBOT_STARTUP_SECONDS:-600}
+[[ "$port" =~ ^[1-9][0-9]{0,4}$ && "$port" -le 65535 ]]
+[[ "$startup_seconds" =~ ^[1-9][0-9]{0,3}$ ]]
+
+alias_name="modelbot-smoke-$$"
+url="http://127.0.0.1:$port"
+log=$(mktemp)
+server_pid=
+cleanup() {
+  local status=$?
+  trap - EXIT
+  if [[ -n "$server_pid" ]]; then
+    kill "$server_pid" 2>/dev/null || true
+    wait "$server_pid" 2>/dev/null || true
+  fi
+  if (( status != 0 )); then
+    tail -n 80 "$log" >&2
+  fi
+  rm -f "$log"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+vllm serve "$MODELBOT_MODEL" \
+  --revision "$MODELBOT_REVISION" --tokenizer-revision "$MODELBOT_REVISION" \
+  --load-format safetensors --host 127.0.0.1 --port "$port" \
+  --served-model-name "$alias_name" >"$log" 2>&1 &
+server_pid=$!
+
+deadline=$((SECONDS + startup_seconds))
+until curl --noproxy '*' -fs --max-time 2 "$url/v1/models" |
+  jq -e --arg name "$alias_name" 'any(.data[]; .id == $name)' >/dev/null
+do
+  if ! kill -0 "$server_pid" 2>/dev/null || (( SECONDS >= deadline )); then
+    echo "The candidate vLLM server did not become ready." >&2
+    exit 1
+  fi
+  sleep 2
+done
+
+request=$(jq -nc --arg model "$alias_name" \
+  '{model:$model, prompt:"The capital of France is", max_tokens:8, temperature:0}')
+curl --noproxy '*' -fsS --max-time 60 -H 'Content-Type: application/json' \
+  --data "$request" "$url/v1/completions" |
+  jq -e '.choices[0].text | strings | test("\\S")' >/dev/null
+echo "vLLM generated text with $MODELBOT_MODEL@$MODELBOT_REVISION."

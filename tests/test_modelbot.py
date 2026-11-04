@@ -93,6 +93,8 @@ class PlanTests(unittest.TestCase):
                 self.assertIn(f"{HUB}/{candidate['repo']}/tree/{'b' * 40}", report)
                 self.assertIn("Declared license changed", report)
                 self.assertIn("Weights or model binaries", report)
+                self.assertIn("1 added, 0 changed, 0 removed", report)
+                self.assertIn("**5 bytes**", report)
                 self.assertIn("&lt;test&gt;.safetensors", report)
 
     def test_no_update_for_same_revision(self):
