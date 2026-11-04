@@ -175,6 +175,16 @@ def report(repo, old, new):
         lines += ["", "Declared license changed:", f"<pre>{html.escape(license_change)}</pre>"]
     if not changes:
         lines += ["", "The file manifest is unchanged."]
+    else:
+        counts = dict.fromkeys(("Added", "Changed", "Removed"), 0)
+        for items in changes.values():
+            for status, _ in items:
+                counts[status] += 1
+        lines += ["", "Files: " + ", ".join(f"{count} {status.lower()}" for status, count in counts.items()) + "."]
+    binaries = changes.get("Weights or model binaries", [])
+    if binaries:
+        candidate_bytes = sum(new["files"][path]["size"] for status, path in binaries if status != "Removed")
+        lines += ["", f"Added or changed model binaries total **{candidate_bytes:,} bytes** in the candidate."]
     for category, items in sorted(changes.items()):
         lines += ["", f"### {category} ({len(items)})", "", "<pre>"]
         for status, path in items[:10]:
