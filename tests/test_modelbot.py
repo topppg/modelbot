@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock
 
-from modelbot import HUB, Hub, read_config, sync_lock
+from modelbot import HUB, Hub, plan_updates, read_config, sync_lock
 
 REPO = "org/model"
 SHA = "a" * 40
@@ -62,3 +62,44 @@ class LockTests(unittest.TestCase):
             config.write_text('[models]\n"../model" = "main"\n')
             with self.assertRaisesRegex(ValueError, "invalid model"):
                 read_config(config)
+
+
+class PlanTests(unittest.TestCase):
+    def test_each_candidate_updates_only_one_pin_and_reports_changes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            other = "org/other"
+            lock = {"version": 1, "models": {
+                repo: {"ref": "main", "revision": SHA, "license": "mit", "files": {}}
+                for repo in (REPO, other)
+            }}
+            hub = Mock()
+            hub.snapshot.return_value = {
+                "ref": "main", "revision": "b" * 40, "license": "apache-2.0",
+                "files": {"<test>.safetensors": {"size": 5, "digest": "sha256:" + "a" * 64}},
+            }
+            output = Path(directory)
+            config = {REPO: "main", other: "main"}
+            candidates = plan_updates(config, lock, hub, output)
+            self.assertEqual(len(candidates), 2)
+            self.assertEqual(candidates, plan_updates(config, lock, hub, output))
+            for candidate in candidates:
+                plan = output / candidate["key"]
+                models = json.loads((plan / "model.lock").read_text())["models"]
+                self.assertEqual(models[candidate["repo"]]["revision"], "b" * 40)
+                unchanged = other if candidate["repo"] == REPO else REPO
+                self.assertEqual(models[unchanged]["revision"], SHA)
+                report = (plan / "report.md").read_text()
+                self.assertIn("Declared license changed", report)
+                self.assertIn("Weights or model binaries", report)
+                self.assertIn("&lt;test&gt;.safetensors", report)
+
+    def test_no_update_for_same_revision(self):
+        snapshot = {"ref": "main", "revision": SHA, "files": {}}
+        hub = Mock()
+        hub.snapshot.return_value = snapshot
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            self.assertEqual(plan_updates(
+                {REPO: "main"}, {"models": {REPO: snapshot}}, hub, output
+            ), [])
+            self.assertEqual(list(output.iterdir()), [])

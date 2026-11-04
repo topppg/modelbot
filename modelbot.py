@@ -1,13 +1,14 @@
 """Pin public Hugging Face model revisions using Hub metadata."""
 
 import argparse
+import hashlib
+import html
 import json
 import re
 import sys
 import tempfile
 import tomllib
 from pathlib import Path
-from urllib.error import URLError
 from urllib.parse import quote, urljoin, urlsplit
 from urllib.request import HTTPRedirectHandler, build_opener
 
@@ -130,15 +131,101 @@ def sync_lock(path, models, hub):
     write_lock(path, {"version": 1, "models": snapshots})
 
 
+def change_category(path):
+    name = Path(path.lower()).name
+    if name.endswith((".safetensors", ".bin", ".gguf", ".pt", ".pth", ".onnx", ".msgpack", ".h5")):
+        return "Weights or model binaries"
+    if name.endswith((".py", ".sh", ".so")):
+        return "Code or executable artifacts"
+    if name.startswith(("tokenizer", "chat_template", "special_tokens", "added_tokens")) or (
+        path.startswith("additional_chat_templates/")
+    ):
+        return "Tokenizer or chat templates"
+    if name.startswith(("license", "licence", "copying", "notice")):
+        return "License files"
+    if name.endswith(".json"):
+        return "Configuration or other JSON"
+    return "Other files"
+
+
+def report(repo, old, new):
+    changes = {}
+    for path in sorted(old["files"].keys() | new["files"].keys()):
+        if path not in old["files"]:
+            status = "Added"
+        elif path not in new["files"]:
+            status = "Removed"
+        elif old["files"][path] != new["files"][path]:
+            status = "Changed"
+        else:
+            continue
+        changes.setdefault(change_category(path), []).append((status, path))
+
+    old_sha, new_sha = old["revision"], new["revision"]
+    lines = [
+        f"Updates `{repo}` from `{old_sha}` to `{new_sha}`.",
+        "",
+        f"[Compare revisions on Hugging Face]({HUB}/{repo}/compare/{old_sha}...{new_sha})",
+        "",
+        "File changes are based on Hub metadata. Model weights were not downloaded for this comparison.",
+    ]
+    if old.get("license") != new.get("license"):
+        license_change = f"{json.dumps(old.get('license'))} → {json.dumps(new.get('license'))}"
+        lines += ["", "Declared license changed:", f"<pre>{html.escape(license_change)}</pre>"]
+    if not changes:
+        lines += ["", "The file manifest is unchanged."]
+    for category, items in sorted(changes.items()):
+        lines += ["", f"### {category} ({len(items)})", "", "<pre>"]
+        for status, path in items[:20]:
+            lines.append(f"{status}  {html.escape(json.dumps(path)[:400])}")
+        if len(items) > 20:
+            lines.append(f"… {len(items) - 20} more (see the lockfile diff)")
+        lines.append("</pre>")
+    return "\n".join(lines) + "\n"
+
+
+def plan_updates(config, lock, hub, output):
+    snapshots = lock["models"]
+    if config != {repo: snapshot["ref"] for repo, snapshot in snapshots.items()}:
+        raise ValueError("configuration and lockfile differ; run modelbot lock first")
+    candidates = []
+    for repo, ref in sorted(config.items()):
+        old = snapshots[repo]
+        new = hub.snapshot(repo, ref)
+        if new["revision"] == old["revision"]:
+            continue
+        model_key = hashlib.sha256(repo.encode()).hexdigest()[:20]
+        update_key = hashlib.sha256(
+            encode([ref, old["revision"], new["revision"]]).encode()
+        ).hexdigest()[:20]
+        branch = f"modelbot/{model_key}/{update_key}"
+        directory = output / model_key
+        directory.mkdir(parents=True, exist_ok=True)
+        write_lock(directory / "model.lock", {
+            **lock, "models": {**snapshots, repo: new},
+        })
+        (directory / "report.md").write_text(report(repo, old, new), encoding="utf-8")
+        candidates.append({
+            "key": model_key, "branch": branch, "repo": repo, "revision": new["revision"],
+        })
+    return candidates
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=Path("modelbot.toml"))
     parser.add_argument("--lock", type=Path, default=Path("model.lock"))
-    parser.add_argument("command", choices=["lock"])
+    parser.add_argument("--output", type=Path, default=Path(".modelbot-plan"))
+    parser.add_argument("command", choices=["lock", "plan"])
     args = parser.parse_args(argv)
     try:
-        sync_lock(args.lock, read_config(args.config), Hub())
-    except (OSError, URLError, ValueError, TypeError, KeyError) as exc:
+        models = read_config(args.config)
+        if args.command == "lock":
+            sync_lock(args.lock, models, Hub())
+        else:
+            updates = plan_updates(models, read_lock(args.lock), Hub(), args.output)
+            print(json.dumps(updates))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
         print(f"modelbot: {exc}", file=sys.stderr)
         return 1
     return 0
